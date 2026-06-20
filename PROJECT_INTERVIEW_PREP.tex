@@ -1,0 +1,2040 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=0.85in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{titlesec}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{220,220,220}
+\definecolor{codetext}{RGB}{35,35,35}
+
+\lstdefinestyle{pythonstyle}{
+  language=Python,
+  basicstyle=\ttfamily\small\color{codetext},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+\setlist[itemize]{leftmargin=1.3em}
+\setlist[enumerate]{leftmargin=1.5em}
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.6em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\given}{\,|\,}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Normal}{\mathcal{N}}
+
+\title{
+  \textbf{MCMC Calibrator Interview Preparation Notes}\\
+  \large Stamatics Society, IITK Project
+}
+\author{Prepared for technical interview defense}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{How To Use This Document}
+
+This document is written for an interview where the interviewer may ask questions
+from quantitative finance, probability, stochastic processes, statistics,
+algorithms, Python implementation, and software design. The goal is not to make
+the project sound more advanced than it is. The goal is to know the exact
+project deeply and to be able to defend every design choice from first
+principles.
+
+The current project is intentionally simple. It has one main script and three
+small modules:
+
+\begin{center}
+\begin{tabular}{p{0.36\linewidth}p{0.54\linewidth}}
+\toprule
+\textbf{File} & \textbf{Purpose}\\
+\midrule
+\code{main.py} & Runs the whole workflow.\\
+\code{data\_pipeline.py} & Downloads prices, computes hedge ratio, spread, and ADF test.\\
+\code{ou\_model.py} & Computes Ornstein-Uhlenbeck log-likelihood.\\
+\code{sampler.py} & Runs Metropolis-Hastings MCMC.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+If asked what the project does in one sentence:
+
+\begin{quote}
+This project takes two related financial assets, constructs a historical spread
+between them, checks whether that spread is mean-reverting, and then uses a
+Metropolis-Hastings MCMC sampler to estimate the hidden parameters of an
+Ornstein-Uhlenbeck model governing that spread.
+\end{quote}
+
+\section{Project Elevator Pitch}
+
+\subsection{The Problem}
+
+In financial markets, individual stock prices often behave like noisy random
+walks. Predicting one stock directly is hard because its movement depends on
+news, macro factors, liquidity, investor behavior, and many unknown shocks.
+
+Pairs trading changes the question. Instead of asking:
+
+\begin{quote}
+Where will stock A go tomorrow?
+\end{quote}
+
+we ask:
+
+\begin{quote}
+If stock A and stock B usually move together, has their relative price moved too
+far away from its historical relationship?
+\end{quote}
+
+The object of interest becomes the \textbf{spread}, not the individual prices.
+
+\subsection{The Core Idea}
+
+Suppose there are two related assets, such as \code{GOOG} and \code{GOOGL}. If
+their prices usually move together, then a suitable weighted difference between
+their log-prices may fluctuate around a stable level. If that spread becomes too
+high or too low, the model expects it to move back toward its average.
+
+This property is called \textbf{mean reversion}.
+
+\subsection{What We Estimate}
+
+The spread is modeled as an Ornstein-Uhlenbeck process:
+
+\[
+dX_t = \theta(\mu - X_t)\,dt + \sigma\,dW_t.
+\]
+
+The unknown parameters are:
+
+\begin{itemize}
+  \item $\theta$: speed of mean reversion.
+  \item $\mu$: long-term mean level of the spread.
+  \item $\sigma$: volatility/noise level of the spread.
+\end{itemize}
+
+The project estimates these parameters using a Markov Chain Monte Carlo method,
+specifically the Metropolis-Hastings algorithm.
+
+\section{What The Project Is Not}
+
+A smart interviewer may test whether you overclaim. Be precise:
+
+\begin{itemize}
+  \item It is not a live trading engine.
+  \item It is not a guaranteed profitable strategy.
+  \item It is not high-frequency trading.
+  \item It does not place real orders.
+  \item It does not include transaction costs, slippage, borrowing cost, or
+  market impact.
+  \item It does not prove the future will behave like the past.
+  \item It is a research prototype for parameter calibration and understanding
+  mean-reverting spreads.
+\end{itemize}
+
+Good interview answer:
+
+\begin{quote}
+The project demonstrates the statistical pipeline: construct a spread, test for
+stationarity, specify an OU likelihood, and use MCMC to infer parameters. It is
+not by itself a complete trading system because execution, costs, risk controls,
+and regime monitoring are not implemented.
+\end{quote}
+
+\section{Day-Wise And Subtask-Wise Plan}
+
+\subsection{Day 1: Understand The Trading Problem}
+
+\textbf{Goal:} Understand why we use pairs rather than single-stock prediction.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Study statistical arbitrage and pairs trading.
+  \item Understand that the spread is the main object, not the raw prices.
+  \item Learn why mean reversion matters.
+  \item Learn the difference between correlation and cointegration.
+\end{enumerate}
+
+\textbf{Interview questions:}
+
+\begin{itemize}
+  \item Why not predict stock price directly?
+  \item Why use two assets?
+  \item What does ``spread'' mean?
+  \item What makes a pair tradable?
+\end{itemize}
+
+\textbf{Answer:} Direct price prediction is difficult because prices are often
+non-stationary. A spread between related assets may be more stable and
+mean-reverting. A pairs-trading strategy tries to exploit temporary deviations
+from the historical relationship.
+
+\subsection{Day 2: Data Collection With \code{yfinance}}
+
+\textbf{Goal:} Download historical price data.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Use \code{yf.download()} for two tickers.
+  \item Use adjusted close prices via \code{auto\_adjust=True}.
+  \item Align dates by dropping missing values.
+  \item Store prices in a Pandas \code{DataFrame}.
+\end{enumerate}
+
+\textbf{Why adjusted prices?} Adjusted prices account for corporate actions like
+splits and dividends. Without adjustment, false jumps can enter the data.
+
+\textbf{Interview trap:} If asked whether Yahoo Finance data is production-grade,
+answer no. It is acceptable for research and student prototypes, but real
+trading systems require reliable licensed data.
+
+\subsection{Day 3: Log Prices And Hedge Ratio}
+
+\textbf{Goal:} Estimate how much of asset B should be used to hedge asset A.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Convert raw prices to log prices.
+  \item Regress $\log(A_t)$ on $\log(B_t)$.
+  \item Extract intercept $\alpha$ and slope $\beta$.
+  \item Interpret $\beta$ as the hedge ratio.
+\end{enumerate}
+
+\textbf{Regression model:}
+
+\[
+\log(A_t) = \alpha + \beta \log(B_t) + \epsilon_t.
+\]
+
+\textbf{Project spread definition:}
+
+\[
+X_t = \log(A_t) - \beta \log(B_t).
+\]
+
+The current code prints the intercept but does not subtract it from the spread.
+That means the long-term mean $\mu$ estimated later absorbs the intercept-like
+level of the spread.
+
+\textbf{If asked whether one could also use residual spread:}
+
+\[
+\epsilon_t = \log(A_t) - \alpha - \beta \log(B_t).
+\]
+
+Answer: yes. That would center the spread more directly around zero. The current
+project keeps the original notebook formula, where the OU mean $\mu$ handles the
+level.
+
+\subsection{Day 4: Stationarity And ADF Test}
+
+\textbf{Goal:} Check whether the spread is suitable for mean-reversion modeling.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Run Augmented Dickey-Fuller test on the spread.
+  \item Read the test statistic and p-value.
+  \item Use p-value below 0.05 as a practical gate.
+  \item Reject pairs whose spreads look non-stationary.
+\end{enumerate}
+
+\textbf{Interview answer:} A mean-reversion model only makes sense if the spread
+does not wander away permanently. The ADF test checks evidence against the null
+hypothesis of a unit root. If the p-value is low, we reject the unit-root null
+and treat the spread as stationary for this prototype.
+
+\subsection{Day 5: Ornstein-Uhlenbeck Model}
+
+\textbf{Goal:} Choose a stochastic model for the spread.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Understand OU process.
+  \item Derive conditional mean.
+  \item Derive conditional variance.
+  \item Write log-likelihood.
+\end{enumerate}
+
+\textbf{OU process:}
+
+\[
+dX_t = \theta(\mu - X_t)\,dt + \sigma dW_t.
+\]
+
+It has two forces:
+
+\begin{itemize}
+  \item deterministic pull back to $\mu$,
+  \item random Brownian shock through $\sigma dW_t$.
+\end{itemize}
+
+\subsection{Day 6: Log-Likelihood}
+
+\textbf{Goal:} Build a score function that says how plausible parameters are.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item For each consecutive pair $(X_{t-1}, X_t)$, compute predicted mean.
+  \item Compute predicted variance.
+  \item Compute residual.
+  \item Sum Gaussian log-probabilities.
+\end{enumerate}
+
+This is implemented in \code{ou\_model.py}.
+
+\subsection{Day 7: MCMC And Metropolis-Hastings}
+
+\textbf{Goal:} Estimate parameters by sampling possible values.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Start from initial guesses.
+  \item Propose new parameters by random walk.
+  \item Score old and new parameters.
+  \item Accept or reject based on likelihood ratio.
+  \item Store trace arrays.
+\end{enumerate}
+
+\subsection{Day 8: Burn-In And Parameter Extraction}
+
+\textbf{Goal:} Convert raw MCMC traces into final values.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Discard first 25 percent of samples.
+  \item Take medians of remaining samples.
+  \item Report $\theta$, $\mu$, $\sigma$.
+  \item Compute half-life.
+\end{enumerate}
+
+\subsection{Day 9: Interview Defense}
+
+\textbf{Goal:} Know limitations and alternatives.
+
+\textbf{Subtasks:}
+
+\begin{enumerate}
+  \item Explain why AMD/INTC failed.
+  \item Explain why GOOG/GOOGL is a clean control pair.
+  \item Explain why this is not guaranteed profit.
+  \item Explain what you would add later, without claiming it is already built.
+\end{enumerate}
+
+\section{Code Flow From First Principles}
+
+\subsection{Runtime Flow}
+
+When we run:
+
+\begin{lstlisting}[style=pythonstyle]
+python main.py
+\end{lstlisting}
+
+the following happens:
+
+\begin{enumerate}
+  \item \code{main.py} imports NumPy, Matplotlib, \code{calculate\_hedge\_ratio},
+  and \code{run\_mcmc\_calibrator}.
+  \item It sets the tickers:
+  \[
+  A = \texttt{GOOG}, \quad B = \texttt{GOOGL}.
+  \]
+  \item It calls \code{calculate\_hedge\_ratio}.
+  \item That function downloads historical prices.
+  \item It computes log-prices.
+  \item It runs OLS regression.
+  \item It constructs the spread.
+  \item It runs the ADF stationarity test.
+  \item Control returns to \code{main.py}.
+  \item \code{main.py} plots the spread.
+  \item It converts the spread column to a NumPy array.
+  \item It calls \code{run\_mcmc\_calibrator}.
+  \item The sampler repeatedly calls \code{compute\_log\_likelihood}.
+  \item It returns arrays for $\theta$, $\mu$, and $\sigma$.
+  \item \code{main.py} discards burn-in and computes medians.
+  \item It prints calibrated parameters and half-life.
+\end{enumerate}
+
+\subsection{Why The Code Is Split Into Modules}
+
+This is not object-oriented in the heavy sense. It is simple functional
+compartmentalization:
+
+\begin{itemize}
+  \item \code{data\_pipeline.py}: data and spread construction.
+  \item \code{ou\_model.py}: mathematical likelihood.
+  \item \code{sampler.py}: MCMC algorithm.
+  \item \code{main.py}: orchestration.
+\end{itemize}
+
+\textbf{If asked why not use classes:} The current state does not require
+persistent complex objects. Functions are enough because each phase takes input,
+produces output, and does not need internal mutable object state. If the project
+grew to support many pairs, configurations, result storage, and diagnostics,
+classes like \code{PairData}, \code{OUSampler}, and \code{CalibrationResult}
+could become useful.
+
+\section{Financial Concepts}
+
+\subsection{Asset}
+
+An asset is a tradable financial instrument. In this project, assets are stocks
+such as \code{GOOG} and \code{GOOGL}.
+
+\subsection{Price Series}
+
+A price series is a sequence:
+
+\[
+P_1, P_2, \dots, P_T
+\]
+
+where $P_t$ is the price at time $t$.
+
+\subsection{Return}
+
+A simple return is:
+
+\[
+R_t = \frac{P_t - P_{t-1}}{P_{t-1}}.
+\]
+
+A log return is:
+
+\[
+r_t = \log(P_t) - \log(P_{t-1}) = \log\left(\frac{P_t}{P_{t-1}}\right).
+\]
+
+The project does not directly model returns. It models a log-price spread.
+
+\subsection{Why Log Prices?}
+
+Log prices are useful because percentage changes become differences:
+
+\[
+\log(P_t) - \log(P_{t-1}) = \log(P_t/P_{t-1}).
+\]
+
+If one asset trades near 100 and another near 1000, raw price differences are
+not scale-comparable. Log transformation makes relationships more proportional.
+
+\subsection{Pairs Trading}
+
+Pairs trading means taking positions in two assets simultaneously so that the
+portfolio is less exposed to broad market movement and more exposed to relative
+mispricing.
+
+Example:
+
+\begin{itemize}
+  \item If spread is too high, asset A may be expensive relative to B.
+  \item Strategy may short A and buy B.
+  \item If spread falls back, the combined position profits.
+\end{itemize}
+
+This project does not implement the trade execution. It calibrates the
+statistical model that could later inform such a strategy.
+
+\subsection{Hedge Ratio}
+
+The hedge ratio $\beta$ says how much of asset B is needed to offset asset A in
+the spread:
+
+\[
+X_t = \log(A_t) - \beta \log(B_t).
+\]
+
+If $\beta \approx 1$, one unit of B roughly offsets one unit of A on log scale.
+
+If $\beta > 1$, movements in B need a larger weight.
+
+If $\beta < 0$, the assets move inversely in the regression relationship.
+
+\subsection{Correlation Versus Cointegration}
+
+Correlation measures whether two series move together at the same time. It is a
+short-run co-movement measure.
+
+Cointegration means a linear combination of two non-stationary series is
+stationary. This is stronger and more relevant to pairs trading.
+
+\textbf{Interview answer:} Two assets can be highly correlated but not
+cointegrated. They may move in the same direction but still drift apart over
+time. For mean-reversion trading, stationarity of the spread matters more than
+simple correlation.
+
+\section{Statistical Foundations}
+
+\subsection{Random Variable}
+
+A random variable is a quantity whose value depends on chance. In the project,
+future spread values are treated as random variables.
+
+\subsection{Probability Distribution}
+
+A probability distribution describes how likely different values are. For a
+continuous variable, we often use a density function.
+
+\subsection{Expected Value}
+
+The expected value is a probability-weighted average:
+
+\[
+\E[X] = \int x f(x)\,dx.
+\]
+
+In discrete form:
+
+\[
+\E[X] = \sum_i x_i p_i.
+\]
+
+\subsection{Variance}
+
+Variance measures average squared deviation from the mean:
+
+\[
+\Var(X) = \E[(X - \E[X])^2].
+\]
+
+In this project, $\sigma$ controls the volatility/noise of the spread.
+
+\subsection{Normal Distribution}
+
+A normal distribution is written:
+
+\[
+X \sim \Normal(m, v),
+\]
+
+where $m$ is mean and $v$ is variance. Its density is:
+
+\[
+f(x) = \frac{1}{\sqrt{2\pi v}}
+\exp\left(-\frac{(x-m)^2}{2v}\right).
+\]
+
+The OU transition uses a normal conditional distribution.
+
+\section{OLS Regression From First Principles}
+
+\subsection{The Model}
+
+We model:
+
+\[
+y_t = \alpha + \beta x_t + \epsilon_t,
+\]
+
+where:
+
+\begin{itemize}
+  \item $y_t = \log(A_t)$,
+  \item $x_t = \log(B_t)$,
+  \item $\alpha$ is intercept,
+  \item $\beta$ is slope or hedge ratio,
+  \item $\epsilon_t$ is residual error.
+\end{itemize}
+
+\subsection{Objective}
+
+OLS chooses $\alpha$ and $\beta$ to minimize squared residuals:
+
+\[
+\min_{\alpha,\beta}\sum_{t=1}^T
+\left(y_t - \alpha - \beta x_t\right)^2.
+\]
+
+\subsection{Why Squared Errors?}
+
+Squaring has useful properties:
+
+\begin{itemize}
+  \item positive and negative errors do not cancel,
+  \item large errors are penalized more,
+  \item the objective is differentiable,
+  \item under Gaussian noise, OLS is maximum likelihood.
+\end{itemize}
+
+\subsection{Closed-Form Slope}
+
+For simple regression:
+
+\[
+\hat{\beta}
+= \frac{\sum_t (x_t - \bar{x})(y_t - \bar{y})}
+{\sum_t (x_t - \bar{x})^2}
+= \frac{\Cov(x,y)}{\Var(x)}.
+\]
+
+\[
+\hat{\alpha} = \bar{y} - \hat{\beta}\bar{x}.
+\]
+
+\subsection{R-Squared}
+
+\[
+R^2 = 1 - \frac{\sum_t (y_t-\hat{y}_t)^2}
+{\sum_t (y_t-\bar{y})^2}.
+\]
+
+It measures how much of the variation in $y$ is explained by the regression.
+
+\textbf{Important:} High $R^2$ does not guarantee stationarity of the spread.
+That is why we still need the ADF test.
+
+\section{Stationarity And ADF}
+
+\subsection{Stationarity}
+
+A time series is stationary if its statistical behavior does not change over
+time. Weak stationarity usually means:
+
+\begin{itemize}
+  \item constant mean,
+  \item constant variance,
+  \item autocovariance depends only on lag, not calendar time.
+\end{itemize}
+
+For pairs trading, stationarity means the spread is not drifting away
+permanently.
+
+\subsection{Unit Root}
+
+A unit-root process has persistent shocks. A simple random walk is:
+
+\[
+X_t = X_{t-1} + \epsilon_t.
+\]
+
+If it goes up today, that shock stays embedded forever. Such a process does not
+mean-revert.
+
+\subsection{ADF Test}
+
+The Augmented Dickey-Fuller test checks the null hypothesis:
+
+\[
+H_0: \text{series has a unit root}
+\]
+
+against:
+
+\[
+H_1: \text{series is stationary}
+\]
+
+If p-value $< 0.05$, we reject the unit-root null at the 5 percent level.
+
+\subsection{ADF In The Code}
+
+\begin{lstlisting}[style=pythonstyle]
+adf_result = adfuller(data["Spread"])
+\end{lstlisting}
+
+The code prints:
+
+\begin{itemize}
+  \item ADF statistic,
+  \item p-value,
+  \item critical values,
+  \item success or warning message.
+\end{itemize}
+
+\subsection{Interview Caution}
+
+Do not say:
+
+\begin{quote}
+ADF proves this spread will always mean-revert.
+\end{quote}
+
+Say:
+
+\begin{quote}
+ADF gives statistical evidence against a unit root in the historical sample.
+It supports using a mean-reversion model, but future regimes may change.
+\end{quote}
+
+\section{Stochastic Process Foundations}
+
+\subsection{What Is A Stochastic Process?}
+
+A stochastic process is a collection of random variables indexed by time:
+
+\[
+\{X_t : t \geq 0\}.
+\]
+
+In this project, $X_t$ is the spread at time $t$.
+
+\subsection{Brownian Motion}
+
+Brownian motion $W_t$ is a continuous-time random process with:
+
+\begin{itemize}
+  \item $W_0 = 0$,
+  \item independent increments,
+  \item $W_t - W_s \sim \Normal(0, t-s)$ for $t > s$,
+  \item continuous paths.
+\end{itemize}
+
+The term $dW_t$ in the OU equation represents random market shock.
+
+\subsection{Stochastic Differential Equation}
+
+An SDE has deterministic and random parts:
+
+\[
+dX_t = a(X_t,t)\,dt + b(X_t,t)\,dW_t.
+\]
+
+For OU:
+
+\[
+a(X_t,t) = \theta(\mu-X_t),
+\qquad
+b(X_t,t)=\sigma.
+\]
+
+\section{Ornstein-Uhlenbeck Process}
+
+\subsection{Definition}
+
+\[
+dX_t = \theta(\mu - X_t)\,dt + \sigma\,dW_t.
+\]
+
+\subsection{Parameter Meaning}
+
+\begin{longtable}{p{0.18\linewidth}p{0.72\linewidth}}
+\toprule
+\textbf{Parameter} & \textbf{Meaning}\\
+\midrule
+$\mu$ & Long-run equilibrium level. The spread is pulled toward this.\\
+$\theta$ & Pull strength or speed of mean reversion. Larger $\theta$ means faster reversion.\\
+$\sigma$ & Noise intensity. Larger $\sigma$ means more random movement around the mean.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Why OU For This Project?}
+
+OU is a natural model for mean-reverting continuous variables. The spread is
+assumed to behave like a noisy rubber band: when far from $\mu$, the drift pulls
+it back.
+
+\subsection{Drift Direction}
+
+The deterministic part is:
+
+\[
+\theta(\mu - X_t).
+\]
+
+If $X_t > \mu$, then $\mu-X_t < 0$, so drift is negative and pulls downward.
+
+If $X_t < \mu$, then $\mu-X_t > 0$, so drift is positive and pulls upward.
+
+If $X_t = \mu$, deterministic drift is zero.
+
+\subsection{Exact Discrete Transition}
+
+The code uses the exact OU transition:
+
+\[
+X_t \given X_{t-1}
+\sim
+\Normal(m_t, v_t),
+\]
+
+where:
+
+\[
+m_t = X_{t-1}e^{-\theta \Delta t}
++ \mu(1-e^{-\theta \Delta t}),
+\]
+
+\[
+v_t =
+\frac{\sigma^2}{2\theta}
+\left(1-e^{-2\theta \Delta t}\right).
+\]
+
+In code:
+
+\begin{lstlisting}[style=pythonstyle]
+exp_term = np.exp(-theta * dt)
+conditional_mean = x_old * exp_term + mu * (1.0 - exp_term)
+conditional_var = (sigma**2 / (2.0 * theta)) * (
+    1.0 - np.exp(-2.0 * theta * dt)
+)
+\end{lstlisting}
+
+\subsection{Derivation Sketch}
+
+Rewrite:
+
+\[
+dX_t = \theta\mu\,dt - \theta X_t\,dt + \sigma dW_t.
+\]
+
+Let:
+
+\[
+Y_t = X_t - \mu.
+\]
+
+Then:
+
+\[
+dY_t = -\theta Y_t\,dt + \sigma dW_t.
+\]
+
+Solving this linear SDE:
+
+\[
+Y_t = Y_s e^{-\theta(t-s)}
++ \sigma \int_s^t e^{-\theta(t-u)}\,dW_u.
+\]
+
+Thus:
+
+\[
+X_t = \mu + (X_s-\mu)e^{-\theta(t-s)}
++ \sigma \int_s^t e^{-\theta(t-u)}\,dW_u.
+\]
+
+The stochastic integral is normally distributed with mean zero and variance:
+
+\[
+\sigma^2\int_s^t e^{-2\theta(t-u)}\,du
+=
+\frac{\sigma^2}{2\theta}
+\left(1-e^{-2\theta(t-s)}\right).
+\]
+
+This gives the transition used in the code.
+
+\section{Likelihood And Log-Likelihood}
+
+\subsection{What Is Likelihood?}
+
+Probability asks:
+
+\begin{quote}
+Given parameters, how likely is the data?
+\end{quote}
+
+Likelihood asks:
+
+\begin{quote}
+Given observed data, how plausible are these parameters?
+\end{quote}
+
+For fixed data, likelihood is a function of parameters:
+
+\[
+L(\theta,\mu,\sigma \given X_1,\dots,X_T).
+\]
+
+\subsection{Conditional Likelihood}
+
+Because the OU process is Markov:
+
+\[
+p(X_1,\dots,X_T)
+= p(X_1)\prod_{t=2}^T p(X_t \given X_{t-1}).
+\]
+
+The code effectively scores:
+
+\[
+\prod_{t=2}^T p(X_t \given X_{t-1};\theta,\mu,\sigma).
+\]
+
+\subsection{Gaussian Log-Likelihood}
+
+For:
+
+\[
+X_t \given X_{t-1} \sim \Normal(m_t,v_t),
+\]
+
+the density is:
+
+\[
+p(X_t\given X_{t-1})
+=
+\frac{1}{\sqrt{2\pi v_t}}
+\exp\left(
+-\frac{(X_t-m_t)^2}{2v_t}
+\right).
+\]
+
+Taking log:
+
+\[
+\log p(X_t\given X_{t-1})
+=
+-\frac{1}{2}\log(2\pi v_t)
+-\frac{(X_t-m_t)^2}{2v_t}.
+\]
+
+Summing over all transitions:
+
+\[
+\ell(\theta,\mu,\sigma)
+=
+-\frac{n}{2}\log(2\pi v)
+-\frac{1}{2v}\sum_{t=2}^T (X_t-m_t)^2.
+\]
+
+This is exactly the expression in the code.
+
+\subsection{Why Use Logs?}
+
+Raw likelihood multiplies many small probabilities. This can underflow to zero
+in floating-point arithmetic.
+
+Logs convert products into sums:
+
+\[
+\log\left(\prod_i p_i\right) = \sum_i \log(p_i).
+\]
+
+This is more numerically stable.
+
+\subsection{Invalid Parameters}
+
+The code rejects:
+
+\[
+\theta \leq 0,\qquad \sigma \leq 0.
+\]
+
+Why?
+
+\begin{itemize}
+  \item $\theta \leq 0$ would mean no positive pull back to mean.
+  \item $\sigma \leq 0$ is invalid because volatility cannot be negative.
+\end{itemize}
+
+Code:
+
+\begin{lstlisting}[style=pythonstyle]
+if theta <= 0 or sigma <= 0:
+    return -np.inf
+\end{lstlisting}
+
+Returning $-\infty$ makes such proposals impossible to accept under the
+likelihood comparison.
+
+\section{MCMC From First Principles}
+
+\subsection{Why MCMC?}
+
+We want the posterior-like distribution of parameters:
+
+\[
+p(\theta,\mu,\sigma \given \text{data}).
+\]
+
+Instead of only finding one best parameter value, MCMC creates a sequence of
+parameter samples. After burn-in, those samples represent plausible parameter
+values according to the data and model.
+
+\subsection{Markov Chain}
+
+A Markov chain is a sequence:
+
+\[
+S_0,S_1,S_2,\dots
+\]
+
+where the next state depends only on the current state:
+
+\[
+P(S_{t+1}\given S_t,S_{t-1},\dots,S_0)
+=
+P(S_{t+1}\given S_t).
+\]
+
+In this project:
+
+\[
+S_i = (\theta_i,\mu_i,\sigma_i).
+\]
+
+The next parameter proposal depends only on the current parameter values.
+
+\subsection{Monte Carlo}
+
+Monte Carlo means using randomness to approximate a quantity. Here, random
+sampling approximates the parameter distribution.
+
+\subsection{Markov Chain Monte Carlo}
+
+MCMC combines both:
+
+\begin{itemize}
+  \item Markov chain: each new sample depends only on current sample.
+  \item Monte Carlo: randomness explores the parameter space.
+\end{itemize}
+
+\subsection{Metropolis-Hastings Algorithm}
+
+At current state $s$:
+
+\[
+s = (\theta,\mu,\sigma).
+\]
+
+Propose:
+
+\[
+s' = s + \eta,
+\]
+
+where $\eta$ is Gaussian random noise.
+
+Compute:
+
+\[
+\log r = \ell(s') - \ell(s).
+\]
+
+Accept if:
+
+\[
+\log u < \log r,
+\qquad u\sim Uniform(0,1).
+\]
+
+If accepted, move to $s'$. If rejected, stay at $s$.
+
+\subsection{Why Accept Worse Moves?}
+
+If $s'$ has lower likelihood, $\log r < 0$. It may still be accepted with
+probability:
+
+\[
+\exp(\ell(s')-\ell(s)).
+\]
+
+This prevents the chain from getting stuck too early in one region.
+
+\subsection{Proposal Widths}
+
+Current code:
+
+\begin{lstlisting}[style=pythonstyle]
+proposal_widths = {"theta": 0.005, "mu": 0.00025, "sigma": 0.00025}
+\end{lstlisting}
+
+These are standard deviations of proposal jumps.
+
+If too large:
+
+\begin{itemize}
+  \item proposals jump into unlikely areas,
+  \item acceptance rate becomes too low,
+  \item chain gets stuck.
+\end{itemize}
+
+If too small:
+
+\begin{itemize}
+  \item proposals are accepted often,
+  \item but movement is slow,
+  \item chain explores poorly.
+\end{itemize}
+
+\subsection{Acceptance Rate}
+
+\[
+\text{Acceptance rate}
+=
+\frac{\text{accepted proposals}}{\text{total proposals}}.
+\]
+
+For random-walk Metropolis in multiple dimensions, a commonly cited theoretical
+target is around 23 percent under idealized assumptions. In practical small
+projects, a broad functional range such as 15--40 percent can be acceptable if
+the traces mix and results are stable.
+
+\textbf{Interview answer:} Acceptance rate is a diagnostic, not the final proof
+of correctness. Trace plots, repeated runs, and sensitivity checks are also
+important.
+
+\section{Burn-In}
+
+\subsection{What Is Burn-In?}
+
+The chain starts from arbitrary initial values:
+
+\[
+\theta_0=1.0,\quad
+\mu_0=\text{sample mean},\quad
+\sigma_0=\text{sample std}.
+\]
+
+Early samples may reflect the starting point more than the target distribution.
+Burn-in discards these early samples.
+
+Current code:
+
+\begin{lstlisting}[style=pythonstyle]
+burn_in = int(0.25 * len(trace_theta))
+clean_theta = trace_theta[burn_in:]
+\end{lstlisting}
+
+This discards first 25 percent.
+
+\subsection{Why Median?}
+
+The code uses:
+
+\[
+\hat{\theta} = \text{median of post-burn-in } \theta \text{ samples}.
+\]
+
+Median is robust to outliers. Mean could also be used.
+
+\section{Half-Life}
+
+\subsection{Definition}
+
+For OU mean reversion, expected deviation decays like:
+
+\[
+\E[X_t-\mu \given X_0] = (X_0-\mu)e^{-\theta t}.
+\]
+
+Half-life $t_{1/2}$ is the time when expected deviation is half:
+
+\[
+e^{-\theta t_{1/2}} = \frac{1}{2}.
+\]
+
+Taking logs:
+
+\[
+-\theta t_{1/2} = \log(1/2) = -\log 2.
+\]
+
+Thus:
+
+\[
+t_{1/2} = \frac{\log 2}{\theta}.
+\]
+
+\subsection{Interpretation}
+
+If half-life is 8.37 days, it does not mean the spread must halve exactly after
+8.37 days. It means that under the fitted OU model, the expected deviation from
+mean decays by half in that time.
+
+\subsection{Trading Interpretation}
+
+Half-life can be used as a time-based risk check:
+
+\begin{itemize}
+  \item If spread has not reverted after several half-lives, model assumptions
+  may have broken.
+  \item Shorter half-life means faster capital recycling.
+  \item Extremely short half-life may be untradable after costs.
+  \item Extremely long half-life may not be useful for a practical pairs trade.
+\end{itemize}
+
+\section{Algorithmic Complexity}
+
+\subsection{Data Pipeline}
+
+Let $T$ be number of time points.
+
+\begin{itemize}
+  \item Downloading data: external network/API cost.
+  \item Log transform: $O(T)$.
+  \item OLS for one regressor: effectively $O(T)$.
+  \item ADF test: depends on lag selection, but roughly linear to low-order
+  polynomial in $T$ for this small use case.
+\end{itemize}
+
+\subsection{Likelihood}
+
+Each likelihood call uses vectorized operations over all $T-1$ transitions.
+
+Cost:
+
+\[
+O(T).
+\]
+
+\subsection{MCMC}
+
+Let $N$ be iterations.
+
+Each iteration calls likelihood once, so total cost:
+
+\[
+O(NT).
+\]
+
+Memory:
+
+\[
+O(N)
+\]
+
+for each trace array. There are three arrays: $\theta$, $\mu$, $\sigma$.
+
+\subsection{Why NumPy Vectorization Helps}
+
+The likelihood avoids a Python loop over all data points. Instead, NumPy applies
+operations over arrays in optimized C-level loops.
+
+This is why:
+
+\begin{lstlisting}[style=pythonstyle]
+x_old = data[:-1]
+x_new = data[1:]
+\end{lstlisting}
+
+is better than manually iterating through each adjacent pair in Python.
+
+\section{Python And Implementation Details}
+
+\subsection{\code{if \_\_name\_\_ == "\_\_main\_\_"}}
+
+This block runs only when the file is executed directly:
+
+\begin{lstlisting}[style=pythonstyle]
+if __name__ == "__main__":
+    ...
+\end{lstlisting}
+
+If the file is imported by another file, this block does not run.
+
+\subsection{Pandas DataFrame}
+
+A DataFrame is a table-like structure with rows and columns. Here, dates are the
+index and ticker symbols are columns.
+
+\subsection{NumPy Array}
+
+NumPy arrays store numerical data efficiently and support vectorized operations.
+The spread is converted using:
+
+\begin{lstlisting}[style=pythonstyle]
+spread_data = processed_df["Spread"].to_numpy()
+\end{lstlisting}
+
+\subsection{Slicing}
+
+\begin{lstlisting}[style=pythonstyle]
+x_old = data[:-1]
+x_new = data[1:]
+\end{lstlisting}
+
+If:
+
+\[
+data = [X_0,X_1,X_2,X_3],
+\]
+
+then:
+
+\[
+x\_old=[X_0,X_1,X_2],
+\qquad
+x\_new=[X_1,X_2,X_3].
+\]
+
+This pairs each day with the next day.
+
+\subsection{Why Preallocate Trace Arrays?}
+
+The code uses:
+
+\begin{lstlisting}[style=pythonstyle]
+trace_theta = np.zeros(iterations)
+\end{lstlisting}
+
+Preallocating arrays avoids repeated dynamic resizing.
+
+\section{OOP And Design Questions}
+
+\subsection{Is This Object-Oriented?}
+
+Not strongly. It is mainly procedural/functional.
+
+\textbf{Good answer:} I kept the implementation simple because the project has
+one pipeline and one model. The modules separate responsibilities. If the
+project expanded, object-oriented design could help represent reusable concepts.
+
+\subsection{Possible Class Design If Needed}
+
+If asked how to convert it to OOP:
+
+\begin{lstlisting}[style=pythonstyle]
+class PairData:
+    def fetch_prices(self): ...
+    def compute_spread(self): ...
+
+class OUModel:
+    def log_likelihood(self, theta, mu, sigma): ...
+
+class MCMCSampler:
+    def run(self): ...
+
+class CalibrationResult:
+    def half_life(self): ...
+\end{lstlisting}
+
+\subsection{Why Not Use Classes Now?}
+
+Because unnecessary classes would make the project look more complex without
+adding real value. Functions are enough for:
+
+\begin{itemize}
+  \item one data pipeline,
+  \item one likelihood,
+  \item one sampler,
+  \item one script.
+\end{itemize}
+
+\section{Limitations And Honest Defenses}
+
+\subsection{GOOG/GOOGL As A Control Pair}
+
+GOOG and GOOGL are share classes of the same company. This makes them a clean
+control pair for testing the mathematical engine.
+
+But:
+
+\begin{itemize}
+  \item margins may be tiny,
+  \item institutional competition is strong,
+  \item transaction costs can dominate,
+  \item it is not necessarily profitable for retail execution.
+\end{itemize}
+
+\textbf{Interview answer:} I used GOOG/GOOGL because it gives a clean
+stationary spread to validate the calibration workflow. It is a mathematical
+sandbox, not a claim that this pair is the best live trade.
+
+\subsection{AMD/INTC Failure}
+
+AMD and Intel are in the same broad semiconductor sector, but during recent
+market regimes their business performance diverged. Same sector does not imply
+stationary spread.
+
+\textbf{Lesson:} The model must test stationarity; it cannot assume it.
+
+\subsection{No Transaction Costs}
+
+Transaction costs include:
+
+\begin{itemize}
+  \item brokerage fees,
+  \item bid-ask spread,
+  \item slippage,
+  \item short borrowing costs,
+  \item taxes,
+  \item market impact.
+\end{itemize}
+
+This project does not include them.
+
+\subsection{No Out-Of-Sample Backtest}
+
+The project calibrates parameters on historical data. A full trading project
+would split data into training and testing periods.
+
+\subsection{No Priors}
+
+The current sampler uses likelihood and implicit hard constraints
+($\theta>0,\sigma>0$). It does not explicitly include Bayesian priors.
+
+If asked whether it is fully Bayesian:
+
+\begin{quote}
+It is MCMC-style parameter sampling using a likelihood and hard parameter
+constraints. A more complete Bayesian version would multiply likelihood by
+explicit priors for $\theta$, $\mu$, and $\sigma$.
+\end{quote}
+
+\section{Common Interview Questions And Strong Answers}
+
+\subsection{Project-Level Questions}
+
+\subsubsection{Q: What is the goal of this project?}
+
+The goal is to build a simple MCMC-based calibrator for a mean-reverting
+pairs-trading spread. It downloads historical prices, estimates a hedge ratio,
+constructs a spread, checks stationarity, models the spread as an OU process,
+and uses Metropolis-Hastings to estimate $\theta$, $\mu$, and $\sigma$.
+
+\subsubsection{Q: Why did you choose pairs trading?}
+
+Because individual prices are often non-stationary and hard to predict. A spread
+between related assets can be more stable. Pairs trading focuses on relative
+mispricing rather than absolute direction.
+
+\subsubsection{Q: Why MCMC?}
+
+MCMC gives a sampling-based way to explore plausible parameter values. Instead
+of only returning one point estimate, it builds a trace of parameter values that
+are likely under the model.
+
+\subsubsection{Q: Is this a production trading system?}
+
+No. It is a research/calibration prototype. Production would need robust data,
+out-of-sample testing, transaction costs, execution logic, monitoring, and risk
+controls.
+
+\subsection{Data Questions}
+
+\subsubsection{Q: Why \code{yfinance}?}
+
+It is convenient and free for prototyping. It is not institutional-grade data.
+
+\subsubsection{Q: Why drop NaN rows?}
+
+Both assets must be aligned on the same dates. If one asset has missing data on
+a date, the spread cannot be computed reliably for that date.
+
+\subsubsection{Q: Why use adjusted prices?}
+
+Adjusted prices reduce artificial jumps caused by dividends and splits.
+
+\subsection{Regression Questions}
+
+\subsubsection{Q: What is the hedge ratio?}
+
+It is the regression slope $\beta$ in:
+
+\[
+\log(A_t)=\alpha+\beta\log(B_t)+\epsilon_t.
+\]
+
+It tells how strongly asset A moves with asset B and how to weight B in the
+spread.
+
+\subsubsection{Q: What if beta is negative?}
+
+Then the assets have an inverse relationship in the regression. The spread
+formula still works mathematically, but trade interpretation changes.
+
+\subsubsection{Q: Does high R-squared mean the pair is tradable?}
+
+No. High R-squared means good in-sample linear fit, but the spread may still be
+non-stationary. We need the ADF test.
+
+\subsection{ADF Questions}
+
+\subsubsection{Q: What is the null hypothesis of ADF?}
+
+The null is that the series has a unit root, meaning it is non-stationary.
+
+\subsubsection{Q: What does p-value below 0.05 mean?}
+
+It means we reject the unit-root null at the 5 percent level and treat the
+spread as stationary for the purposes of this model.
+
+\subsubsection{Q: Is p-value 0.049 very different from 0.051?}
+
+Not practically. The 0.05 cutoff is conventional. A good researcher would also
+inspect plots, test robustness, and check out-of-sample behavior.
+
+\subsection{OU Questions}
+
+\subsubsection{Q: Why is OU mean-reverting?}
+
+Because the drift term is $\theta(\mu-X_t)$. If $X_t$ is above $\mu$, drift is
+negative. If below $\mu$, drift is positive.
+
+\subsubsection{Q: What happens if theta increases?}
+
+The pull back to mean becomes faster. Half-life decreases because:
+
+\[
+t_{1/2}=\frac{\log 2}{\theta}.
+\]
+
+\subsubsection{Q: What happens if sigma increases?}
+
+The spread becomes noisier. Even with mean reversion, random shocks can push it
+farther from the mean.
+
+\subsubsection{Q: Why is sigma positive?}
+
+Volatility is a scale parameter. Negative volatility has no meaning in the
+normal distribution variance.
+
+\subsection{Likelihood Questions}
+
+\subsubsection{Q: What does log-likelihood measure?}
+
+It measures how plausible a parameter set is given the observed spread path
+under the OU transition model.
+
+\subsubsection{Q: Why not use probability directly?}
+
+Multiplying many small probabilities can underflow to zero. Logs are numerically
+stable.
+
+\subsubsection{Q: Why is the residual squared?}
+
+Because the Gaussian density penalizes squared deviations from conditional mean.
+Large misses receive larger penalty.
+
+\subsection{MCMC Questions}
+
+\subsubsection{Q: What is Markov about your chain?}
+
+The next parameter proposal depends only on the current parameter state, not the
+full past history.
+
+\subsubsection{Q: What is Monte Carlo about it?}
+
+It uses random sampling to explore parameter space.
+
+\subsubsection{Q: Why accept worse proposals?}
+
+To avoid getting stuck in local regions and to correctly sample from the target
+distribution.
+
+\subsubsection{Q: What is acceptance rate?}
+
+It is the fraction of proposed parameter moves accepted by the sampler.
+
+\subsubsection{Q: What is a good acceptance rate?}
+
+There is no universal number, but for random-walk Metropolis in multiple
+dimensions, around 20--40 percent is often healthy; around 23 percent is a
+classic theoretical reference under ideal assumptions. The current project's
+15.7 percent was functional after tuning, but diagnostics should not rely on
+that number alone.
+
+\subsection{Algorithm Questions}
+
+\subsubsection{Q: What is time complexity?}
+
+If $T$ is data length and $N$ is MCMC iterations, each likelihood is $O(T)$ and
+the sampler is $O(NT)$.
+
+\subsubsection{Q: Why preallocate arrays?}
+
+It avoids repeated memory allocation during the loop and stores the trace
+efficiently.
+
+\subsubsection{Q: Why vectorize likelihood?}
+
+NumPy performs array operations in optimized low-level code, which is faster
+than Python loops.
+
+\subsection{Software Design Questions}
+
+\subsubsection{Q: Why split into modules?}
+
+To separate responsibilities:
+
+\begin{itemize}
+  \item data pipeline,
+  \item OU model,
+  \item sampler,
+  \item orchestration.
+\end{itemize}
+
+\subsubsection{Q: Why not add more abstractions?}
+
+The current project is small. Adding classes and frameworks would create
+unnecessary complexity. The structure is simple but still readable.
+
+\subsection{Critical Thinking Questions}
+
+\subsubsection{Q: What is the biggest weakness of the project?}
+
+The biggest weakness is that it calibrates on one historical sample without
+out-of-sample testing or transaction-cost modeling. It proves the calibration
+workflow, not profitability.
+
+\subsubsection{Q: What would you add next?}
+
+I would add out-of-sample validation, rolling-window calibration, transaction
+costs, and trace diagnostics. I would keep them separate from the current simple
+calibrator.
+
+\subsubsection{Q: Why did you not force AMD/INTC to work?}
+
+Because a model should reject bad data. If the spread is non-stationary, forcing
+MCMC on it gives misleading parameters.
+
+\section{Line-By-Line Code Explanation}
+
+\subsection{\code{data\_pipeline.py}}
+
+\begin{lstlisting}[style=pythonstyle]
+raw_data = yf.download(
+    [ticker_a, ticker_b],
+    start=start_date,
+    end=end_date,
+    auto_adjust=True,
+    progress=False,
+)
+\end{lstlisting}
+
+This downloads historical adjusted price data.
+
+\begin{lstlisting}[style=pythonstyle]
+data[ticker_a] = raw_data["Close"][ticker_a]
+data[ticker_b] = raw_data["Close"][ticker_b]
+data = data.dropna()
+\end{lstlisting}
+
+This extracts synchronized close prices and removes missing rows.
+
+\begin{lstlisting}[style=pythonstyle]
+log_a = np.log(data[ticker_a])
+log_b = np.log(data[ticker_b])
+\end{lstlisting}
+
+This transforms prices into log prices.
+
+\begin{lstlisting}[style=pythonstyle]
+X = sm.add_constant(log_b)
+model = sm.OLS(log_a, X).fit()
+\end{lstlisting}
+
+This fits:
+
+\[
+\log(A_t)=\alpha+\beta\log(B_t)+\epsilon_t.
+\]
+
+\begin{lstlisting}[style=pythonstyle]
+data["Spread"] = log_a - (beta * log_b)
+\end{lstlisting}
+
+This creates the project spread.
+
+\begin{lstlisting}[style=pythonstyle]
+adf_result = adfuller(data["Spread"])
+\end{lstlisting}
+
+This tests whether the spread has a unit root.
+
+\subsection{\code{ou\_model.py}}
+
+\begin{lstlisting}[style=pythonstyle]
+if theta <= 0 or sigma <= 0:
+    return -np.inf
+\end{lstlisting}
+
+Invalid parameters are rejected immediately.
+
+\begin{lstlisting}[style=pythonstyle]
+x_old = data[:-1]
+x_new = data[1:]
+\end{lstlisting}
+
+This constructs adjacent time pairs.
+
+\begin{lstlisting}[style=pythonstyle]
+conditional_mean = x_old * exp_term + mu * (1.0 - exp_term)
+\end{lstlisting}
+
+This computes OU conditional mean.
+
+\begin{lstlisting}[style=pythonstyle]
+conditional_var = (sigma**2 / (2.0 * theta)) * (
+    1.0 - np.exp(-2.0 * theta * dt)
+)
+\end{lstlisting}
+
+This computes OU conditional variance.
+
+\begin{lstlisting}[style=pythonstyle]
+residuals = x_new - conditional_mean
+sum_squared_residuals = np.sum(residuals**2)
+\end{lstlisting}
+
+This measures prediction errors.
+
+\begin{lstlisting}[style=pythonstyle]
+log_likelihood = -0.5 * n * np.log(2.0 * np.pi * conditional_var) - (
+    sum_squared_residuals / (2.0 * conditional_var)
+)
+\end{lstlisting}
+
+This is the Gaussian log-likelihood.
+
+\subsection{\code{sampler.py}}
+
+\begin{lstlisting}[style=pythonstyle]
+current_theta = 1.0
+current_mu = data.mean()
+current_sigma = data.std()
+\end{lstlisting}
+
+These are starting guesses.
+
+\begin{lstlisting}[style=pythonstyle]
+proposed_theta = current_theta + np.random.normal(0, proposal_widths["theta"])
+\end{lstlisting}
+
+This proposes a new $\theta$ by random walk.
+
+\begin{lstlisting}[style=pythonstyle]
+log_acceptance_ratio = proposed_log_lik - current_log_lik
+\end{lstlisting}
+
+Because log likelihoods are used, likelihood ratio becomes subtraction.
+
+\begin{lstlisting}[style=pythonstyle]
+if np.log(np.random.uniform(0, 1)) < log_acceptance_ratio:
+    current_theta = proposed_theta
+\end{lstlisting}
+
+This is the Metropolis-Hastings accept/reject rule.
+
+\section{Possible Whiteboard Derivations}
+
+\subsection{Derive Half-Life}
+
+Start from expected OU deviation:
+
+\[
+\E[X_t-\mu] = (X_0-\mu)e^{-\theta t}.
+\]
+
+Set:
+
+\[
+\E[X_t-\mu] = \frac{1}{2}(X_0-\mu).
+\]
+
+Cancel:
+
+\[
+e^{-\theta t}=\frac{1}{2}.
+\]
+
+Take log:
+
+\[
+-\theta t = -\log 2.
+\]
+
+Therefore:
+
+\[
+t=\frac{\log 2}{\theta}.
+\]
+
+\subsection{Derive Metropolis Acceptance Rule}
+
+For symmetric proposal:
+
+\[
+q(s'\given s)=q(s\given s').
+\]
+
+Acceptance probability:
+
+\[
+\alpha(s,s')=\min\left(1,\frac{\pi(s')}{\pi(s)}\right).
+\]
+
+If $\pi(s)\propto L(s)$:
+
+\[
+\alpha=\min\left(1,\frac{L(s')}{L(s)}\right).
+\]
+
+Taking logs:
+
+\[
+\log\frac{L(s')}{L(s)} = \ell(s')-\ell(s).
+\]
+
+The code accepts if:
+
+\[
+\log u < \ell(s')-\ell(s).
+\]
+
+\section{What To Say If Pressed Hard}
+
+\subsection{Is Your MCMC Actually Bayesian?}
+
+Strict answer:
+
+\begin{quote}
+The implementation uses an MCMC mechanism over a likelihood with hard parameter
+constraints. It does not include explicit prior distributions, so it is closer
+to likelihood-based MCMC exploration than a fully specified Bayesian posterior.
+To make it fully Bayesian, I would define priors such as log-normal or gamma for
+$\theta$ and $\sigma$, and normal for $\mu$, then sample from log-posterior =
+log-likelihood + log-prior.
+\end{quote}
+
+\subsection{Why Use MCMC If OU Has MLE?}
+
+Good answer:
+
+\begin{quote}
+For the simple OU model, one can estimate parameters through maximum likelihood
+or related closed-form/discrete methods. I used MCMC because the project goal is
+to understand sampling-based calibration and uncertainty over parameters, not
+only point estimation. MCMC also generalizes when the likelihood becomes more
+complex.
+\end{quote}
+
+\subsection{What If The Spread Is Not Stationary?}
+
+\begin{quote}
+Then the OU assumption is not appropriate. The calibrator may still output
+numbers, but they should not be trusted. The correct response is to reject the
+pair or change the time window.
+\end{quote}
+
+\subsection{What If Acceptance Rate Is 0.07 Percent?}
+
+\begin{quote}
+The proposal widths are too large relative to the scale of the target
+distribution. Most proposed parameters land in low-likelihood or invalid
+regions, so the chain barely moves. I would shrink proposal widths and inspect
+trace behavior.
+\end{quote}
+
+\subsection{What If Acceptance Rate Is 90 Percent?}
+
+\begin{quote}
+Proposal widths are probably too small. The chain accepts many moves but moves
+very slowly, producing high autocorrelation.
+\end{quote}
+
+\section{Defensible Current Results}
+
+From the notebook context, the clean control run produced approximately:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Quantity} & \textbf{Approximate Value}\\
+\midrule
+Pair & GOOG/GOOGL\\
+Hedge ratio $\beta$ & 0.997\\
+Intercept $\alpha$ & 0.022\\
+$R^2$ & 0.9999\\
+ADF p-value & 0.0292\\
+Acceptance rate & 15.70 percent\\
+$\theta$ & 0.0829\\
+$\mu$ & 0.0224\\
+$\sigma$ & 0.0013\\
+Half-life & 8.37 days\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Defensible interpretation:
+
+\begin{itemize}
+  \item The pair is structurally very close because both are Alphabet share
+  classes.
+  \item The spread passed the ADF gate in the tested sample.
+  \item The estimated $\theta$ implies an expected half-life around 8 trading
+  days.
+  \item This is useful for demonstrating the calibrator, not proof of a
+  profitable real strategy.
+\end{itemize}
+
+\section{Final Interview Checklist}
+
+Before the interview, be able to explain:
+
+\begin{enumerate}
+  \item Why pairs trading uses spread instead of raw prices.
+  \item Why log prices are used.
+  \item What OLS estimates.
+  \item What hedge ratio means.
+  \item Why high $R^2$ is not enough.
+  \item What stationarity means.
+  \item What ADF tests.
+  \item What OU process means.
+  \item What $\theta$, $\mu$, and $\sigma$ mean.
+  \item How the OU transition distribution is computed.
+  \item How the log-likelihood formula is built.
+  \item Why logs are used.
+  \item What MCMC means.
+  \item What Markov means.
+  \item What Monte Carlo means.
+  \item How Metropolis-Hastings accepts/rejects.
+  \item What proposal widths do.
+  \item What acceptance rate means.
+  \item Why burn-in is removed.
+  \item Why median is used.
+  \item How half-life is derived.
+  \item Why half-life is not a guarantee.
+  \item Why GOOG/GOOGL is a control pair.
+  \item Why AMD/INTC failed.
+  \item What the project does not include.
+  \item How the code is compartmentalized.
+  \item Why the project avoids unnecessary classes.
+  \item What you would add next without claiming it is already built.
+\end{enumerate}
+
+\section{Short Version To Recite}
+
+If you have only one minute:
+
+\begin{quote}
+This project builds a simple MCMC calibrator for a pairs-trading spread. First,
+I download adjusted historical prices for two assets and convert them to log
+prices. I regress log price of asset A on log price of asset B to estimate the
+hedge ratio, then construct the spread as $\log(A)-\beta\log(B)$. I run an ADF
+test to check if this spread is stationary, because mean-reversion modeling only
+makes sense if the spread does not behave like a random walk. Then I model the
+spread using an Ornstein-Uhlenbeck process with parameters $\theta$, $\mu$, and
+$\sigma$. The likelihood uses the exact OU conditional normal transition. Since
+the parameters are unknown, I use a Metropolis-Hastings MCMC sampler: propose
+new parameters, compute log-likelihood, accept better moves and sometimes worse
+moves according to the likelihood ratio, and store the trace. After burn-in, I
+take medians as calibrated estimates. Finally, I compute half-life as
+$\log(2)/\theta$, which gives the expected timescale of mean reversion. The
+project is a calibration prototype, not a complete trading system.
+\end{quote}
+
+\section{Deep-Dive Question Bank}
+
+\subsection{Probability And Statistics}
+
+\begin{enumerate}
+  \item What is a random variable?
+  \item What is a probability distribution?
+  \item What is a density?
+  \item What is expectation?
+  \item What is variance?
+  \item Why is Gaussian distribution used here?
+  \item What is likelihood?
+  \item What is log-likelihood?
+  \item What is maximum likelihood?
+  \item What is a p-value?
+  \item What is the null hypothesis in ADF?
+  \item What is stationarity?
+  \item What is unit root?
+  \item What is autocorrelation?
+  \item Why can high correlation still fail for pairs trading?
+\end{enumerate}
+
+\subsection{Quant Finance}
+
+\begin{enumerate}
+  \item What is pairs trading?
+  \item What is statistical arbitrage?
+  \item What is hedge ratio?
+  \item What is spread?
+  \item Why use log spread?
+  \item What is cointegration?
+  \item Why transaction costs matter?
+  \item Why is GOOG/GOOGL clean but not necessarily profitable?
+  \item Why can sector pairs fail?
+  \item What is regime shift?
+\end{enumerate}
+
+\subsection{Stochastic Calculus}
+
+\begin{enumerate}
+  \item What is Brownian motion?
+  \item What is an SDE?
+  \item What is drift?
+  \item What is diffusion?
+  \item Why is OU mean-reverting?
+  \item Derive the OU conditional mean.
+  \item Derive the OU conditional variance.
+  \item Derive half-life.
+\end{enumerate}
+
+\subsection{Algorithms}
+
+\begin{enumerate}
+  \item What is MCMC?
+  \item What is Markov property?
+  \item What is Monte Carlo?
+  \item What is Metropolis-Hastings?
+  \item Why accept worse moves?
+  \item What is proposal distribution?
+  \item What are proposal widths?
+  \item What is burn-in?
+  \item What is acceptance rate?
+  \item What is time complexity?
+  \item What is memory complexity?
+\end{enumerate}
+
+\subsection{Python And Design}
+
+\begin{enumerate}
+  \item Why use Pandas?
+  \item Why use NumPy?
+  \item What does vectorization mean?
+  \item What does slicing do?
+  \item Why preallocate arrays?
+  \item Why split files into modules?
+  \item Why not use classes?
+  \item How would you convert this into OOP?
+  \item How would you test this?
+  \item How would you make it production-ready?
+\end{enumerate}
+
+\section{Closing Position}
+
+The strongest final position in an interview is:
+
+\begin{quote}
+I understand this as a clean calibration prototype. The value of the project is
+not that it guarantees profit, but that it connects the full chain from data to
+statistical validation to stochastic modeling to MCMC parameter estimation to a
+human-interpretable risk metric. I can explain the math and the code, and I also
+know what the project deliberately does not yet include.
+\end{quote}
+
+\end{document}
