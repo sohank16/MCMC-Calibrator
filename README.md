@@ -71,7 +71,7 @@ Neelatmajam Dwivedi - 240687
 Aditya Kukreti - 240058  
 Palash Lahoti - 240721  
 Prithvijeet Bhattacharya - 240799  
-Sohan Kadam  - 240506  
+Kadam Sohan Santosh - 240506  
 Ved Kartikey - 241150  
 Kiran Khandu - 240547  
 
